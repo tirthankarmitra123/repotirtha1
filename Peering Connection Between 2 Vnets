@@ -1,0 +1,187 @@
+terraform {
+ required_providers {
+   azurerm = {
+     source = "hashicorp/azurerm"
+     version = "4.14.0"
+   }
+ }
+}
+
+provider "azurerm" {
+ # Configuration options
+subscription_id = "0a92a073-658a-4c1f-8c01-a0892e4bc63f"
+features{}
+}
+
+resource "azurerm_resource_group" "example" {
+ name     = "terraform121"
+ location = "East US"
+}
+# Create virtual network
+resource "azurerm_virtual_network" "example" {
+ name                = "HOVnet"
+ address_space       = ["172.16.0.0/16"]
+ location            = azurerm_resource_group.example.location
+ resource_group_name = azurerm_resource_group.example.name
+}
+# Create subnet within the virtual network
+resource "azurerm_subnet" "example1" {
+ name                 = "AppSN"
+ resource_group_name  = azurerm_resource_group.example.name
+ virtual_network_name = azurerm_virtual_network.example.name
+ address_prefixes     = ["172.16.10.0/24"]
+}
+# Create subnet within the virtual network
+resource "azurerm_subnet" "example2" {
+ name                 = "WorkSN"
+ resource_group_name  = azurerm_resource_group.example.name
+ virtual_network_name = azurerm_virtual_network.example.name
+ address_prefixes     = ["172.16.20.0/24"]
+}
+
+# Create public IP address
+resource "azurerm_public_ip" "public_ip" {
+  name                = "myPublicIP"
+  location            = azurerm_resource_group.example.location
+  resource_group_name = azurerm_resource_group.example.name
+  allocation_method   = "Static"
+}
+
+# Create network interface
+resource "azurerm_network_interface" "nic" {
+  name                = "myNIC"
+  location            = azurerm_resource_group.example.location
+  resource_group_name = azurerm_resource_group.example.name
+
+  ip_configuration {
+    name                          = "myNICConfig"
+    subnet_id                     = azurerm_subnet.example1.id
+    private_ip_address_allocation = "Dynamic"
+    public_ip_address_id          = azurerm_public_ip.public_ip.id
+  }
+}
+
+# Create Ubuntu VM in worksSN
+resource "azurerm_virtual_machine" "vm" {
+  name                  = "VM1"
+  location              = azurerm_resource_group.example.location
+  resource_group_name   = azurerm_resource_group.example.name
+  network_interface_ids = [azurerm_network_interface.nic.id]
+  vm_size               = "Standard_DS1_v2"
+
+  # Use the latest Ubuntu LTS image
+  storage_image_reference {
+    publisher = "Canonical"
+    offer     = "UbuntuServer"
+    sku       = "18.04-LTS"
+    version   = "latest"
+  }
+
+  storage_os_disk {
+    name              = "myOSDisk"
+    caching           = "ReadWrite"
+    create_option     = "FromImage"
+    managed_disk_type = "Standard_LRS"
+  }
+
+  os_profile {
+    computer_name  = "VM1"
+    admin_username = "azureuser1"
+    admin_password = "Password1234!"
+  }
+
+  os_profile_linux_config {
+    disable_password_authentication = false
+  }
+  
+  tags = {
+    Environment = "Development"
+  }
+}
+
+# Create public IP address
+resource "azurerm_public_ip" "public_ip2" {
+  name                = "myPublicIP2"
+  location            = azurerm_resource_group.example.location
+  resource_group_name = azurerm_resource_group.example.name
+  allocation_method   = "Static"
+}
+
+# Create network interface
+resource "azurerm_network_interface" "nic2" {
+  name                = "myNIC2"
+  location            = azurerm_resource_group.example.location
+  resource_group_name = azurerm_resource_group.example.name
+
+  ip_configuration {
+    name                          = "myNICConfig2"
+    subnet_id                     = azurerm_subnet.example2.id
+    private_ip_address_allocation = "Dynamic"
+    public_ip_address_id          = azurerm_public_ip.public_ip2.id
+  }
+}
+
+# Create Ubuntu VM in worksSN
+resource "azurerm_virtual_machine" "vm2" {
+  name                  = "VM2"
+  location              = azurerm_resource_group.example.location
+  resource_group_name   = azurerm_resource_group.example.name
+  network_interface_ids = [azurerm_network_interface.nic2.id]
+  vm_size               = "Standard_DS1_v2"
+
+  # Use the latest Ubuntu LTS image
+  storage_image_reference {
+    publisher = "Canonical"
+    offer     = "UbuntuServer"
+    sku       = "18.04-LTS"
+    version   = "latest"
+  }
+
+  storage_os_disk {
+    name              = "myOSDisk2"
+    caching           = "ReadWrite"
+    create_option     = "FromImage"
+    managed_disk_type = "Standard_LRS"
+  }
+
+  os_profile {
+    computer_name  = "VM2"
+    admin_username = "azureuser2"
+    admin_password = "Password1234!"
+  }
+
+  os_profile_linux_config {
+    disable_password_authentication = false
+  }
+  
+  tags = {
+    Environment = "Development"
+  }
+}
+
+# Create virtual network
+resource "azurerm_virtual_network" "example3" {
+ name                = "BranchSN"
+ address_space       = ["172.18.0.0/16"]
+ location            = azurerm_resource_group.example.location
+ resource_group_name = azurerm_resource_group.example.name
+}
+
+# Create Peering between HOvnet and BranchSN
+resource "azurerm_virtual_network_peering" "peering_hovnet_to_branchsn" {
+  name                      = "HOvnet-to-BranchSN"
+  resource_group_name       = azurerm_resource_group.example.name
+  virtual_network_name      = azurerm_virtual_network.example.name
+  remote_virtual_network_id = azurerm_virtual_network.example3.id
+  allow_forwarded_traffic   = true
+  allow_virtual_network_access = true
+}
+
+resource "azurerm_virtual_network_peering" "peering_branchsn_to_hovnet" {
+  name                      = "BranchSN-to-HOvnet"
+  resource_group_name       = azurerm_resource_group.example.name
+  virtual_network_name      = azurerm_virtual_network.example3.name
+  remote_virtual_network_id = azurerm_virtual_network.example.id
+  allow_forwarded_traffic   = true
+  allow_virtual_network_access = true
+}
